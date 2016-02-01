@@ -1,12 +1,5 @@
 package org.mitre.jose.jwk;
 
-import org.apache.commons.cli.CommandLine;
-import org.apache.commons.cli.CommandLineParser;
-import org.apache.commons.cli.HelpFormatter;
-import org.apache.commons.cli.Options;
-import org.apache.commons.cli.ParseException;
-import org.apache.commons.cli.PosixParser;
-
 import com.google.common.base.Strings;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -19,6 +12,15 @@ import com.nimbusds.jose.jwk.JWK;
 import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.KeyType;
 import com.nimbusds.jose.jwk.KeyUse;
+import org.apache.commons.cli.CommandLine;
+import org.apache.commons.cli.CommandLineParser;
+import org.apache.commons.cli.HelpFormatter;
+import org.apache.commons.cli.Options;
+import org.apache.commons.cli.ParseException;
+import org.apache.commons.cli.PosixParser;
+
+import java.io.FileWriter;
+import java.io.IOException;
 
 /**
  * Hello world!
@@ -40,6 +42,7 @@ public class Launcher {
     	options.addOption("p", false, "Display public key separately");
     	options.addOption("c", true, "Key Curve, required for EC key type. Must be one of " + Curve.P_256 + ", " + Curve.P_384 + ", " + Curve.P_521);
     	options.addOption("S", false, "Wrap the generated key in a KeySet");
+		options.addOption("o", true, "File path to output the key JSON to.");
 
     	//options.addOption("g", false, "Load GUI");
     	
@@ -53,6 +56,7 @@ public class Launcher {
 	        String alg = cmd.getOptionValue("a");
 	        String kid = cmd.getOptionValue("i");
 	        String crv = cmd.getOptionValue("c");
+			String filePath = cmd.getOptionValue("o");
 	        boolean keySet = cmd.hasOption("S");
 	        boolean pubKey = cmd.hasOption("p");
 
@@ -125,15 +129,27 @@ public class Launcher {
 
         	// round trip it through GSON to get a prettyprinter
         	Gson gson = new GsonBuilder().setPrettyPrinting().create();
+			String outputJson = null;
         	
         	if (keySet) {
         		JWKSet jwkSet = new JWKSet(jwk);
-        		JsonElement json = new JsonParser().parse(jwkSet.toJSONObject(false).toJSONString());        	
-        		System.out.println(gson.toJson(json));
+        		JsonElement json = new JsonParser().parse(jwkSet.toJSONObject(false).toJSONString());
+				outputJson = gson.toJson(json);
+
         	} else {
-        		JsonElement json = new JsonParser().parse(jwk.toJSONString());        	
-        		System.out.println(gson.toJson(json));
+        		JsonElement json = new JsonParser().parse(jwk.toJSONString());
+				outputJson = gson.toJson(json);
         	}
+
+			System.out.println(outputJson);
+
+			if (!Strings.isNullOrEmpty(filePath)) {
+				try (FileWriter fileWriter = new FileWriter(filePath)) {
+					fileWriter.append(outputJson);
+					fileWriter.flush();
+				}
+				System.out.println("Key output to " + filePath);
+			}
         	
 			if (pubKey) {
         		System.out.println(); // spacer
@@ -160,11 +176,13 @@ public class Launcher {
     		printUsageAndExit("Invalid key size: " + e.getMessage());
         } catch (ParseException e) {
         	printUsageAndExit("Failed to parse arguments: " + e.getMessage());
-        }
-    	
-    	
-    	
-    }
+        } catch (IOException e) {
+			System.err.println("Failed to write file: " + e.getMessage());
+			e.printStackTrace();
+			System.exit(2);
+		}
+
+	}
     
     // print out a usage message and quit
     private static void printUsageAndExit(String message) {
